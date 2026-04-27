@@ -36,13 +36,13 @@ epc_key = "49047b27453a21db42d8e69ad07267ed00314ae0"
 # GITHUB RAW FILE URLS
 # Replace USERNAME and REPO if needed
 # ---------------------------------------------------
-BASE_URL = "https://raw.githubusercontent.com/YOUR_USERNAME/uk-real-estate-econ-app/main/data/"
+BASE_URL = "https://raw.githubusercontent.com/Barrook1/uk-real-estate-econ-app/main/data/"
 
 LAND_URL = "https://drive.google.com/uc?export=download&id=1fuUW5ZrT72KA1uvBMhBiAO1h1dvQACaE"
-BANK_URL = BASE_URL + "bankrate.csv"
-WAGE_URL = BASE_URL + "ons_median_wage.csv"
-POP_URL = BASE_URL + "ons_population.csv"
-UNEMP_URL = BASE_URL + "ons_unemployment.csv"
+BANK_URL = "data/bankrate.csv"
+WAGE_URL = "data/ons_median_wage.csv"
+POP_URL = "data/ons_population.csv"
+UNEMP_URL = "data/ons_unemployment.csv
 
 # ---------------------------------------------------
 # FUNCTIONS
