@@ -1,3 +1,17 @@
+import streamlit as st
+import pandas as pd
+import requests
+import plotly.express as px
+from textblob import TextBlob
+from pathlib import Path
+
+# ---------------------------------------------------
+# PAGE CONFIG
+# ---------------------------------------------------
+st.set_page_config(
+    page_title="UK Real Estate & Economy Dashboard",
+    layout="wide"
+)
 
 st.title("UK Real Estate Price Changes and Economic Indicators")
 
@@ -30,10 +44,19 @@ BANK_URL = "data/bankrate.csv"
 WAGE_URL = "data/ons_median_wage.csv"
 POP_URL = "data/ons_population.csv"
 UNEMP_URL = "data/ons_unemployment.csv
-BANK_URL = "bankrate.csv"
-WAGE_URL = "ons_median_wage.csv"
-POP_URL = "ons_population.csv"
-UNEMP_URL = "ons_unemployment.csv"
+
+
+def local_csv_path(filename):
+    data_path = Path("data") / filename
+    if data_path.exists():
+        return str(data_path)
+    return filename
+
+
+BANK_URL = local_csv_path("bankrate.csv")
+WAGE_URL = local_csv_path("ons_median_wage.csv")
+POP_URL = local_csv_path("ons_population.csv")
+UNEMP_URL = local_csv_path("ons_unemployment.csv")
 
 # ---------------------------------------------------
 # FUNCTIONS
