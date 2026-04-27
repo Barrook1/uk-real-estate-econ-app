@@ -13,8 +13,8 @@ This app explores how UK property prices change over time and compares them with
 unemployment, wages, interest rates, population growth, and housing news sentiment.
 """)
 
-guardian_key = st.secrets["GUARDIAN_API_KEY"]
-epc_key = st.secrets["EPC_API_KEY"]
+guardian_key = st.secrets["f57dc3df-6bff-431a-aeaa-84da13200f71"]
+epc_key = st.secrets["49047b27453a21db42d8e69ad07267ed00314ae0"]
 
 # ----------------------------
 # Example: Guardian API
