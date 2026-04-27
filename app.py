@@ -44,19 +44,16 @@ BANK_URL = "data/bankrate.csv"
 WAGE_URL = "data/ons_median_wage.csv"
 POP_URL = "data/ons_population.csv"
 UNEMP_URL = "data/ons_unemployment.csv
+UNEMP_URL = "data/ons_unemployment.csv"
 
-
-def local_csv_path(filename):
-    data_path = Path("data") / filename
-    if data_path.exists():
-        return str(data_path)
-    return filename
-
-
-BANK_URL = local_csv_path("bankrate.csv")
-WAGE_URL = local_csv_path("ons_median_wage.csv")
-POP_URL = local_csv_path("ons_population.csv")
-UNEMP_URL = local_csv_path("ons_unemployment.csv")
+if not Path(BANK_URL).exists():
+    BANK_URL = "bankrate.csv"
+if not Path(WAGE_URL).exists():
+    WAGE_URL = "ons_median_wage.csv"
+if not Path(POP_URL).exists():
+    POP_URL = "ons_population.csv"
+if not Path(UNEMP_URL).exists():
+    UNEMP_URL = "ons_unemployment.csv"
 
 # ---------------------------------------------------
 # FUNCTIONS
