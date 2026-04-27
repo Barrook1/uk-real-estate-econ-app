@@ -72,7 +72,7 @@ LAND_URL = "https://drive.google.com/uc?export=download&id=1fuUW5ZrT72KA1uvBMhBi
 BANK_URL = "data/bankrate.csv"
 WAGE_URL = "data/ons_median_wage.csv"
 POP_URL = "data/ons_population.csv"
-UNEMP_URL = "data/ons_unemployment.csv
+UNEMP_URL = "data/ons_unemployment.csv"
 
 # ---------------------------------------------------
 # FUNCTIONS
