@@ -213,39 +213,13 @@ elif section == "EPC Property Size":
 else:
     st.subheader("Combined Example Dashboard")
 
-    demo = pd.DataFrame({
-        "year": [2020, 2021, 2022, 2023, 2024],
-        "average_price": [250000, 270000, 292000, 285000, 300000],
-        "unemployment_rate": [4.5, 4.6, 3.8, 4.1, 4.4],
-        "median_wage": [29000, 30000, 32000, 33500, 35000],
-        "bank_rate": [0.1, 0.1, 3.5, 5.25, 5.0],
-        "population_growth": [0.4, 0.5, 0.6, 0.3, 0.2]
-    })
+    
+else:
+    st.subheader("Combined Example Dashboard")
 
-    st.dataframe(demo)
+    url = "https://drive.google.com/uc?export=download&id=1fuUW5ZrT72KA1uvBMhBiAO1h1dvQACaE"
 
-    fig1 = px.line(
-        demo,
-        x="year",
-        y="average_price",
-        title="Average Property Price"
-    )
-    st.plotly_chart(fig1, use_container_width=True)
+    sales = pd.read_csv(url)
 
-    fig2 = px.line(
-        demo,
-        x="year",
-        y=["unemployment_rate", "bank_rate"],
-        title="Unemployment vs Interest Rates"
-    )
-    st.plotly_chart(fig2, use_container_width=True)
-
-    fig3 = px.line(
-        demo,
-        x="year",
-        y="median_wage",
-        title="Median Wage Growth"
-    )
-    st.plotly_chart(fig3, use_container_width=True)
-
-st.caption("Beginner version. Next step: replace demo data with real HM Land Registry and ONS datasets.")
+    st.write("Raw Data")
+    st.dataframe(sales.head())
