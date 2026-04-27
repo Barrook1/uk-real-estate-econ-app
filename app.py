@@ -14,6 +14,7 @@ unemployment, wages, interest rates, population growth, and housing news sentime
 """)
 
 guardian_key = st.secrets["GUARDIAN_API_KEY"]
+epc_key = st.secrets["EPC_API_KEY"]
 
 # ----------------------------
 # Example: Guardian API
@@ -75,10 +76,43 @@ if st.sidebar.button("Load Guardian Sentiment"):
             title="Average Monthly Guardian Sentiment on UK House Prices"
         )
         st.plotly_chart(fig, use_container_width=True)
+# ----------------------------
+# EPC API Section
+# ----------------------------
 
+st.subheader("EPC Property Size Data")
+
+postcode = st.text_input("Enter a UK postcode", "SW1A 1AA")
+
+def get_epc_data(postcode):
+    url = f"https://epc.opendatacommunities.org/api/v1/domestic/search?postcode={postcode}"
+
+    headers = {
+        "Authorization": epc_key
+    }
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+        st.error(f"Error: {response.status_code}")
+        return None
+
+if st.button("Load EPC Data"):
+    epc_data = get_epc_data(postcode)
+
+    if epc_data:
+        st.write(epc_data)
 # ----------------------------
 # Placeholder: property data
 # ----------------------------
+st.subheader("EPC API Connection Test")
+
+if st.button("Test EPC Key"):
+    st.success("EPC key loaded successfully.")
+    st.write("First 4 characters:", epc_key[:4] + "****")
+
 
 st.subheader("Property Price Data")
 
