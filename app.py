@@ -286,7 +286,7 @@ if run:
     guard = get_guardian_sentiment(query, str(from_date), str(to_date))
         rows = data.get("rows", [])
     epc_size = get_epc_size_for_postcode(postcode)
-    except Exception:
+    
         if not rows:
             return pd.DataFrame()
     if use_ons_api and all(wage_cfg.values()):
