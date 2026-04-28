@@ -20,8 +20,8 @@ ONS_BASE_URL = "https://api.beta.ons.gov.uk/v1"
 BOE_RATE_URL = "https://www.bankofengland.co.uk/boeapps/database/Bank-Rate.asp"
 
 # These are filled from sidebar input boxes below.
-GUARDIAN_API_KEY = "f57dc3df-6bff-431a-aeaa-84da13200f71"
-EPC_API_KEY = "49047b27453a21db42d8e69ad07267ed00314ae0"
+GUARDIAN_API_KEY = ""
+EPC_API_KEY = ""
 
 DATA_DIR = Path(__file__).resolve().parent
 
