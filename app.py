@@ -109,7 +109,7 @@ def get_guardian_sentiment(query: str, from_date: str, to_date: str) -> pd.DataF
         "api-key": guardian_key,
         "api-key": GUARDIAN_API_KEY,
         "show-fields": "headline,trailText",
-        "page-size": 50
+        "page-size": 50,
         "page-size": 200,
     }
 
