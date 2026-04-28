@@ -285,7 +285,7 @@ if run:
     bank = get_bank_rate()
     guard = get_guardian_sentiment(query, str(from_date), str(to_date))
     except Exception:
-        return {}
+    return {}
         rows = data.get("rows", [])
     epc_size = get_epc_size_for_postcode(postcode)
 
