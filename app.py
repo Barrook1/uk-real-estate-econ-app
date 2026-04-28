@@ -271,6 +271,9 @@ if use_ons_api:
     }
 
     response = requests.get(url, headers=headers)
+url = f"https://epc.opendatacommunities.org/api/v1/domestic/search?postcode={postcode}"
+headers = {"Authorization": epc_key}
+response = requests.get(url, headers=headers)
 run = st.sidebar.button("Build Modeling Table")
 
 if response.status_code != 200:
@@ -306,9 +309,52 @@ if run:
         return pd.DataFrame()
     if use_ons_api and all(unemp_cfg.values()):
         unemp = get_ons_series(**unemp_cfg, out_name="unemployment_rate")
+    if response.status_code != 200:
+        st.error(f"EPC API error: {response.status_code}")
+        model_df = pd.DataFrame()
     else:
         unemp = load_csv_fallback("ons_unemployment.csv", "date", "unemployment_rate", "unemployment_rate")
+        st.info("Pulling and preparing data...")
 
+        try:
+            data = response.json()
+            rows = data.get("rows", [])
+            if not rows:
+                st.warning("No EPC rows returned for this postcode.")
+                model_df = pd.DataFrame()
+            else:
+                house = get_house_price_england()
+                bank = get_bank_rate()
+                guard = get_guardian_sentiment(query, str(from_date), str(to_date))
+                epc_size = get_epc_size_for_postcode(postcode)
+
+                if use_ons_api and all(wage_cfg.values()):
+                    wage = get_ons_series(**wage_cfg, out_name="median_wage")
+                else:
+                    wage = load_csv_fallback("ons_median_wage.csv", "date", "median_wage", "median_wage")
+
+                if use_ons_api and all(pop_cfg.values()):
+                    pop = get_ons_series(**pop_cfg, out_name="population_total")
+                else:
+                    pop = load_csv_fallback("ons_population.csv", "date", "population_total", "population_total")
+
+                if use_ons_api and all(unemp_cfg.values()):
+                    unemp = get_ons_series(**unemp_cfg, out_name="unemployment_rate")
+                else:
+                    unemp = load_csv_fallback("ons_unemployment.csv", "date", "unemployment_rate", "unemployment_rate")
+
+                model_df = house.merge(bank, on="month", how="left")
+                model_df = model_df.merge(wage, on="month", how="left")
+                model_df = model_df.merge(pop, on="month", how="left")
+                model_df = model_df.merge(unemp, on="month", how="left")
+                model_df = model_df.merge(guard, on="month", how="left")
+                model_df["avg_property_size_sqm"] = epc_size
+                model_df = model_df.sort_values("month")
+        except Exception:
+            st.error("Could not read EPC response.")
+            model_df = pd.DataFrame()
+else:
+    model_df = pd.DataFrame()
 # ---------------------------------------------------
 # SIDEBAR
 # ---------------------------------------------------
@@ -325,6 +371,7 @@ section = st.sidebar.radio(
     "Choose Section",
     ["Guardian Sentiment", "EPC Property Size", "Combined Demo"]
 )
+if not model_df.empty:
     st.subheader("Modeling Table")
     st.dataframe(model_df, use_container_width=True)
 
@@ -351,7 +398,10 @@ if section == "Guardian Sentiment":
     coef_df = fit_ols_numpy(model_df, "real_estate_value", x_cols)
     st.subheader("Linear Model Coefficients")
     st.dataframe(coef_df, use_container_width=True)
-
+        if not model_df.empty:
+            coef_df = fit_ols_numpy(model_df, "real_estate_value", x_cols)
+            st.subheader("Linear Model Coefficients")
+            st.dataframe(coef_df, use_container_width=True)
         df = get_guardian_articles(
             query,
             str(from_date),
