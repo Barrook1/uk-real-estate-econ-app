@@ -220,6 +220,7 @@ def get_epc_data(postcode):
 
     headers = {
         "Authorization": epc_key
+    }
 def get_house_price_england() -> pd.DataFrame:
     """
     England real-estate value (dependent variable).
