@@ -284,7 +284,7 @@ if run:
     house = get_house_price_england()
     bank = get_bank_rate()
     guard = get_guardian_sentiment(query, str(from_date), str(to_date))
-
+     except Exception:
         rows = data.get("rows", [])
     epc_size = get_epc_size_for_postcode(postcode)
 
