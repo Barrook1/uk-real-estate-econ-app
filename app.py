@@ -273,7 +273,7 @@ if use_ons_api:
     response = requests.get(url, headers=headers)
 run = st.sidebar.button("Build Modeling Table")
 
-    if response.status_code != 200:
+if response.status_code != 200:
         st.error(f"EPC API error: {response.status_code}")
         return pd.DataFrame()
 if run:
