@@ -197,7 +197,7 @@ def get_ons_series(dataset_id: str, edition: str, version: str, timeseries: str,
     df[out_name] = pd.to_numeric(df[out_name], errors="coerce")
     return df.dropna(subset=["month"])
 
-        rows.append({
+    rows.append({
             "date": date,
             "headline": headline,
             "sentiment": sentiment,
