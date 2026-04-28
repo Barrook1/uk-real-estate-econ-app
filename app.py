@@ -271,9 +271,6 @@ if use_ons_api:
     }
 
     response = requests.get(url, headers=headers)
-url = f"https://epc.opendatacommunities.org/api/v1/domestic/search?postcode={postcode}"
-headers = {"Authorization": epc_key}
-response = requests.get(url, headers=headers)
 run = st.sidebar.button("Build Modeling Table")
 
 if response.status_code != 200:
@@ -287,7 +284,16 @@ if run:
     house = get_house_price_england()
     bank = get_bank_rate()
     guard = get_guardian_sentiment(query, str(from_date), str(to_date))
+    url = f"https://epc.opendatacommunities.org/api/v1/domestic/search?postcode={postcode}"
+    headers = {"Authorization": epc_key}
+    response = requests.get(url, headers=headers)
 
+    if response.status_code != 200:
+        st.error(f"EPC API error: {response.status_code}")
+        model_df = pd.DataFrame()
+    else:
+        st.info("Pulling and preparing data...")
+        data = safe_get_json(url, headers=headers)
         rows = data.get("rows", [])
     epc_size = get_epc_size_for_postcode(postcode)
 
@@ -297,64 +303,51 @@ if run:
         wage = get_ons_series(**wage_cfg, out_name="median_wage")
     else:
         wage = load_csv_fallback("ons_median_wage.csv", "date", "median_wage", "median_wage")
+            st.warning("No EPC rows returned for this postcode.")
+            model_df = pd.DataFrame()
+        else:
+            house = get_house_price_england()
+            bank = get_bank_rate()
+            guard = get_guardian_sentiment(query, str(from_date), str(to_date))
+            epc_size = get_epc_size_for_postcode(postcode)
 
         return pd.DataFrame(rows)
     if use_ons_api and all(pop_cfg.values()):
         pop = get_ons_series(**pop_cfg, out_name="population_total")
     else:
         pop = load_csv_fallback("ons_population.csv", "date", "population_total", "population_total")
+            if use_ons_api and all(wage_cfg.values()):
+                wage = get_ons_series(**wage_cfg, out_name="median_wage")
+            else:
+                wage = load_csv_fallback("ons_median_wage.csv", "date", "median_wage", "median_wage")
 
     except:
         st.error("Could not read EPC response.")
         return pd.DataFrame()
     if use_ons_api and all(unemp_cfg.values()):
         unemp = get_ons_series(**unemp_cfg, out_name="unemployment_rate")
-    if response.status_code != 200:
-        st.error(f"EPC API error: {response.status_code}")
-        model_df = pd.DataFrame()
     else:
         unemp = load_csv_fallback("ons_unemployment.csv", "date", "unemployment_rate", "unemployment_rate")
-        st.info("Pulling and preparing data...")
-
-        try:
-            data = response.json()
-            rows = data.get("rows", [])
-            if not rows:
-                st.warning("No EPC rows returned for this postcode.")
-                model_df = pd.DataFrame()
+            if use_ons_api and all(pop_cfg.values()):
+                pop = get_ons_series(**pop_cfg, out_name="population_total")
             else:
-                house = get_house_price_england()
-                bank = get_bank_rate()
-                guard = get_guardian_sentiment(query, str(from_date), str(to_date))
-                epc_size = get_epc_size_for_postcode(postcode)
+                pop = load_csv_fallback("ons_population.csv", "date", "population_total", "population_total")
 
-                if use_ons_api and all(wage_cfg.values()):
-                    wage = get_ons_series(**wage_cfg, out_name="median_wage")
-                else:
-                    wage = load_csv_fallback("ons_median_wage.csv", "date", "median_wage", "median_wage")
+            if use_ons_api and all(unemp_cfg.values()):
+                unemp = get_ons_series(**unemp_cfg, out_name="unemployment_rate")
+            else:
+                unemp = load_csv_fallback("ons_unemployment.csv", "date", "unemployment_rate", "unemployment_rate")
 
-                if use_ons_api and all(pop_cfg.values()):
-                    pop = get_ons_series(**pop_cfg, out_name="population_total")
-                else:
-                    pop = load_csv_fallback("ons_population.csv", "date", "population_total", "population_total")
-
-                if use_ons_api and all(unemp_cfg.values()):
-                    unemp = get_ons_series(**unemp_cfg, out_name="unemployment_rate")
-                else:
-                    unemp = load_csv_fallback("ons_unemployment.csv", "date", "unemployment_rate", "unemployment_rate")
-
-                model_df = house.merge(bank, on="month", how="left")
-                model_df = model_df.merge(wage, on="month", how="left")
-                model_df = model_df.merge(pop, on="month", how="left")
-                model_df = model_df.merge(unemp, on="month", how="left")
-                model_df = model_df.merge(guard, on="month", how="left")
-                model_df["avg_property_size_sqm"] = epc_size
-                model_df = model_df.sort_values("month")
-        except Exception:
-            st.error("Could not read EPC response.")
-            model_df = pd.DataFrame()
+            model_df = house.merge(bank, on="month", how="left")
+            model_df = model_df.merge(wage, on="month", how="left")
+            model_df = model_df.merge(pop, on="month", how="left")
+            model_df = model_df.merge(unemp, on="month", how="left")
+            model_df = model_df.merge(guard, on="month", how="left")
+            model_df["avg_property_size_sqm"] = epc_size
+            model_df = model_df.sort_values("month")
 else:
     model_df = pd.DataFrame()
+
 # ---------------------------------------------------
 # SIDEBAR
 # ---------------------------------------------------
@@ -402,6 +395,7 @@ if section == "Guardian Sentiment":
             coef_df = fit_ols_numpy(model_df, "real_estate_value", x_cols)
             st.subheader("Linear Model Coefficients")
             st.dataframe(coef_df, use_container_width=True)
+
         df = get_guardian_articles(
             query,
             str(from_date),
@@ -426,71 +420,7 @@ if section == "Guardian Sentiment":
             fig = px.line(
                 monthly,
                 x="date",
-                y="sentiment",
-                title="Average Monthly News Sentiment"
-            )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-# ---------------------------------------------------
-# EPC SECTION
-# ---------------------------------------------------
-elif section == "EPC Property Size":
-
-    st.subheader("EPC Property Size Data")
-
-    postcode = st.text_input("Enter postcode", "SW1A 1AA")
-
-    if st.button("Load EPC Data"):
-
-        epc_df = get_epc_data(postcode)
-
-        if epc_df.empty:
-            st.warning("No EPC records found.")
-        else:
-            st.dataframe(epc_df)
-
-            possible_size_cols = [
-                "total-floor-area",
-                "floor-area",
-                "floorArea",
-                "floors-area"
-            ]
-
-            size_col = None
-            for col in possible_size_cols:
-                if col in epc_df.columns:
-                    size_col = col
-                    break
-
-            if size_col:
-                epc_df[size_col] = pd.to_numeric(
-                    epc_df[size_col],
-                    errors="coerce"
-                )
-
-                avg_size = epc_df[size_col].mean()
-
-                st.metric("Average Floor Area (sqm)", round(avg_size, 2))
-
-                fig = px.histogram(
-                    epc_df,
-                    x=size_col,
-                    nbins=20,
-                    title="Distribution of Property Size"
-                )
-
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("Floor area column not found in returned data.")
-
-# ---------------------------------------------------
-# COMBINED DEMO SECTION
-# ---------------------------------------------------
-else:
-    st.subheader("Combined Example Dashboard")
-
-    demo = pd.DataFrame({
+@@ -444,42 +449,38 @@ else:
         "year": [2020, 2021, 2022, 2023, 2024],
         "average_price": [250000, 270000, 292000, 285000, 300000],
         "unemployment_rate": [4.5, 4.6, 3.8, 4.1, 4.4],
