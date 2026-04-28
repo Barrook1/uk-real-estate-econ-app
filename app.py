@@ -36,6 +36,10 @@ with independent variables:
 - ONS unemployment rate
 - EPC property size (postcode level)
 - Guardian sentiment (TextBlob)
+This dashboard explores England housing prices with:
+- EPC floor-area data (postcode)
+- Guardian housing-news sentiment
+- Bank Rate, wage, population, and unemployment indicators
 """
 )
 
@@ -46,6 +50,7 @@ with independent variables:
 guardian_key = "f57dc3df-6bff-431a-aeaa-84da13200f71"
 epc_key = "49047b27453a21db42d8e69ad07267ed00314ae0"
 
+# API KEYS / CONSTANTS
 # ---------------------------------------------------
 # GUARDIAN API FUNCTION
 # ---------------------------------------------------
@@ -54,13 +59,17 @@ def get_guardian_articles(query, from_date, to_date):
 # -----------------------------------------------------------------------------
 GUARDIAN_API_KEY = os.getenv("GUARDIAN_API_KEY", "57dc3df-6bff-431a-aeaa-84da13200f71")
 EPC_API_KEY = os.getenv("EPC_API_KEY", "49047b27453a21db42d8e69ad07267ed00314ae0")
+GUARDIAN_API_KEY = os.getenv("GUARDIAN_API_KEY", "")
+EPC_API_KEY = os.getenv("EPC_API_KEY", "")
 ONS_BASE_URL = "https://api.beta.ons.gov.uk/v1"
 BOE_RATE_URL = "https://www.bankofengland.co.uk/boeapps/database/Bank-Rate.asp"
 
 
 # -----------------------------------------------------------------------------
+# ---------------------------------------------------
 # HELPERS
 # -----------------------------------------------------------------------------
+# ---------------------------------------------------
 def safe_get_json(url: str, params: dict | None = None, headers: dict | None = None) -> dict:
     """GET helper that returns {} if request fails."""
     try:
@@ -79,6 +88,7 @@ def monthly_average(df: pd.DataFrame, date_col: str, value_col: str, name: str) 
     out["month"] = out[date_col].dt.to_period("M").dt.to_timestamp()
     out = out.groupby("month", as_index=False)[value_col].mean().rename(columns={value_col: name})
     return out
+    return out.groupby("month", as_index=False)[value_col].mean().rename(columns={value_col: name})
 
 
 def fit_ols_numpy(df: pd.DataFrame, y_col: str, x_cols: list[str]) -> pd.DataFrame:
@@ -88,19 +98,26 @@ def fit_ols_numpy(df: pd.DataFrame, y_col: str, x_cols: list[str]) -> pd.DataFra
         return pd.DataFrame({"term": [], "coefficient": []})
 
     X = model_df[x_cols].astype(float).to_numpy()
+    x_matrix = model_df[x_cols].astype(float).to_numpy()
     y = model_df[y_col].astype(float).to_numpy()
+    x_matrix = np.column_stack([np.ones(len(x_matrix)), x_matrix])
+    beta, *_ = np.linalg.lstsq(x_matrix, y, rcond=None)
 
     X = np.column_stack([np.ones(len(X)), X])  # intercept
     beta, *_ = np.linalg.lstsq(X, y, rcond=None)
 
     terms = ["intercept"] + x_cols
     return pd.DataFrame({"term": terms, "coefficient": beta})
+    return pd.DataFrame({"term": ["intercept"] + x_cols, "coefficient": beta})
 
 
 # -----------------------------------------------------------------------------
+# ---------------------------------------------------
 # DATA COLLECTORS
 # -----------------------------------------------------------------------------
 def get_guardian_sentiment(query: str, from_date: str, to_date: str) -> pd.DataFrame:
+# ---------------------------------------------------
+def get_guardian_articles(query: str, from_date: str, to_date: str) -> pd.DataFrame:
     url = "https://content.guardianapis.com/search"
     params = {
         "q": query,
@@ -109,6 +126,8 @@ def get_guardian_sentiment(query: str, from_date: str, to_date: str) -> pd.DataF
         "api-key": guardian_key,
         "api-key": GUARDIAN_API_KEY,
         "show-fields": "headline,trailText",
+        "api-key": GUARDIAN_API_KEY or "test",
+        "show-fields": "trailText",
         "page-size": 50,
         "page-size": 200,
     }
@@ -116,30 +135,54 @@ def get_guardian_sentiment(query: str, from_date: str, to_date: str) -> pd.DataF
     response = requests.get(url, params=params)
     data = safe_get_json(url, params=params)
     rows = data.get("response", {}).get("results", [])
+    results = data.get("response", {}).get("results", [])
 
     if response.status_code != 200:
         st.error(f"Guardian API error: {response.status_code}")
         return pd.DataFrame()
     parsed = []
     for item in rows:
+    rows = []
+    for item in results:
         headline = item.get("webTitle", "")
         trail = item.get("fields", {}).get("trailText", "")
         pub_date = item.get("webPublicationDate", "")
         polarity = TextBlob(f"{headline} {trail}").sentiment.polarity
         parsed.append({"date": pub_date, "sentiment": polarity})
+        published = item.get("webPublicationDate", "")
+        sentiment = TextBlob(f"{headline} {trail}").sentiment.polarity
+        rows.append(
+            {
+                "date": published[:10],
+                "headline": headline,
+                "sentiment": sentiment,
+                "url": item.get("webUrl", ""),
+            }
+        )
 
     data = response.json()
     results = data["response"]["results"]
     if not parsed:
         return pd.DataFrame(columns=["month", "guardian_sentiment"])
+    return pd.DataFrame(rows)
 
     return monthly_average(pd.DataFrame(parsed), "date", "sentiment", "guardian_sentiment")
 
+def get_guardian_sentiment(query: str, from_date: str, to_date: str) -> pd.DataFrame:
+    df = get_guardian_articles(query, from_date, to_date)
+    if df.empty:
+        return pd.DataFrame(columns=["month", "guardian_sentiment"])
+    return monthly_average(df, "date", "sentiment", "guardian_sentiment")
 
 def get_epc_size_for_postcode(postcode: str) -> float:
     """Returns average floor area for postcode using EPC API."""
+
+def get_epc_data(postcode: str) -> pd.DataFrame:
     url = f"https://epc.opendatacommunities.org/api/v1/domestic/search?postcode={postcode}"
     headers = {"Authorization": EPC_API_KEY}
+    headers = {"Authorization": EPC_API_KEY} if EPC_API_KEY else None
+    data = safe_get_json(url, headers=headers)
+    return pd.DataFrame(data.get("rows", []))
 
     try:
         r = requests.get(url, headers=headers, timeout=30)
@@ -149,6 +192,9 @@ def get_epc_size_for_postcode(postcode: str) -> float:
         rows = []
 
     if not rows:
+def get_epc_size_for_postcode(postcode: str) -> float:
+    epc_df = get_epc_data(postcode)
+    if epc_df.empty:
         return np.nan
 
     epc_df = pd.DataFrame(rows)
@@ -182,6 +228,11 @@ def get_ons_series(dataset_id: str, edition: str, version: str, timeseries: str,
         val = o.get("observation")
         if month and val is not None:
             rows.append({"month": month, out_name: val})
+    for obs in data.get("observations", []):
+        month = obs.get("dimensions", {}).get("time", {}).get("id")
+        value = obs.get("observation")
+        if month and value is not None:
+            rows.append({"month": month, out_name: value})
 
     for item in results:
         headline = item["webTitle"]
@@ -196,6 +247,10 @@ def get_ons_series(dataset_id: str, edition: str, version: str, timeseries: str,
     df["month"] = pd.to_datetime(df["month"], errors="coerce")
     df[out_name] = pd.to_numeric(df[out_name], errors="coerce")
     return df.dropna(subset=["month"])
+    out = pd.DataFrame(rows)
+    out["month"] = pd.to_datetime(out["month"], errors="coerce")
+    out[out_name] = pd.to_numeric(out[out_name], errors="coerce")
+    return out.dropna(subset=["month"])
 
     rows.append({
             "date": date,
@@ -240,6 +295,9 @@ def get_house_price_england() -> pd.DataFrame:
 # -----------------------------------------------------------------------------
 # UI
 # -----------------------------------------------------------------------------
+# ---------------------------------------------------
+# UI INPUTS
+# ---------------------------------------------------
 st.sidebar.header("Inputs")
 postcode = st.sidebar.text_input("EPC postcode", "SW1A 1AA")
 query = st.sidebar.text_input("Guardian query", "England house prices")
@@ -249,8 +307,13 @@ to_date = st.sidebar.date_input("Guardian to", pd.to_datetime("today"))
 st.sidebar.markdown("### ONS Series (optional)")
 use_ons_api = st.sidebar.checkbox("Use ONS API instead of local CSV files", value=False)
 
+wage_cfg = {"dataset_id": "", "edition": "", "version": "", "timeseries": ""}
+pop_cfg = {"dataset_id": "", "edition": "", "version": "", "timeseries": ""}
+unemp_cfg = {"dataset_id": "", "edition": "", "version": "", "timeseries": ""}
+
 if use_ons_api:
     st.sidebar.caption("Fill with your ONS dataset metadata. If blank/invalid, local CSV fallback is used.")
+    st.sidebar.caption("If ONS metadata is incomplete, local CSV fallback is used.")
     wage_cfg = {
         "dataset_id": st.sidebar.text_input("Wage dataset id", ""),
         "edition": st.sidebar.text_input("Wage edition", ""),
@@ -284,16 +347,7 @@ if run:
     house = get_house_price_england()
     bank = get_bank_rate()
     guard = get_guardian_sentiment(query, str(from_date), str(to_date))
-    url = f"https://epc.opendatacommunities.org/api/v1/domestic/search?postcode={postcode}"
-    headers = {"Authorization": epc_key}
-    response = requests.get(url, headers=headers)
 
-    if response.status_code != 200:
-        st.error(f"EPC API error: {response.status_code}")
-        model_df = pd.DataFrame()
-    else:
-        st.info("Pulling and preparing data...")
-        data = safe_get_json(url, headers=headers)
         rows = data.get("rows", [])
     epc_size = get_epc_size_for_postcode(postcode)
 
@@ -301,25 +355,26 @@ if run:
             return pd.DataFrame()
     if use_ons_api and all(wage_cfg.values()):
         wage = get_ons_series(**wage_cfg, out_name="median_wage")
+    epc_df = get_epc_data(postcode)
+    if epc_df.empty:
+        st.warning("No EPC rows returned for this postcode.")
+        model_df = pd.DataFrame()
     else:
         wage = load_csv_fallback("ons_median_wage.csv", "date", "median_wage", "median_wage")
-            st.warning("No EPC rows returned for this postcode.")
-            model_df = pd.DataFrame()
-        else:
-            house = get_house_price_england()
-            bank = get_bank_rate()
-            guard = get_guardian_sentiment(query, str(from_date), str(to_date))
-            epc_size = get_epc_size_for_postcode(postcode)
+        house = get_house_price_england()
+        bank = get_bank_rate()
+        guard = get_guardian_sentiment(query, str(from_date), str(to_date))
+        epc_size = get_epc_size_for_postcode(postcode)
 
         return pd.DataFrame(rows)
     if use_ons_api and all(pop_cfg.values()):
         pop = get_ons_series(**pop_cfg, out_name="population_total")
     else:
         pop = load_csv_fallback("ons_population.csv", "date", "population_total", "population_total")
-            if use_ons_api and all(wage_cfg.values()):
-                wage = get_ons_series(**wage_cfg, out_name="median_wage")
-            else:
-                wage = load_csv_fallback("ons_median_wage.csv", "date", "median_wage", "median_wage")
+        if use_ons_api and all(wage_cfg.values()):
+            wage = get_ons_series(**wage_cfg, out_name="median_wage")
+        else:
+            wage = load_csv_fallback("ons_median_wage.csv", "date", "median_wage", "median_wage")
 
     except:
         st.error("Could not read EPC response.")
@@ -328,23 +383,23 @@ if run:
         unemp = get_ons_series(**unemp_cfg, out_name="unemployment_rate")
     else:
         unemp = load_csv_fallback("ons_unemployment.csv", "date", "unemployment_rate", "unemployment_rate")
-            if use_ons_api and all(pop_cfg.values()):
-                pop = get_ons_series(**pop_cfg, out_name="population_total")
-            else:
-                pop = load_csv_fallback("ons_population.csv", "date", "population_total", "population_total")
+        if use_ons_api and all(pop_cfg.values()):
+            pop = get_ons_series(**pop_cfg, out_name="population_total")
+        else:
+            pop = load_csv_fallback("ons_population.csv", "date", "population_total", "population_total")
 
-            if use_ons_api and all(unemp_cfg.values()):
-                unemp = get_ons_series(**unemp_cfg, out_name="unemployment_rate")
-            else:
-                unemp = load_csv_fallback("ons_unemployment.csv", "date", "unemployment_rate", "unemployment_rate")
+        if use_ons_api and all(unemp_cfg.values()):
+            unemp = get_ons_series(**unemp_cfg, out_name="unemployment_rate")
+        else:
+            unemp = load_csv_fallback("ons_unemployment.csv", "date", "unemployment_rate", "unemployment_rate")
 
-            model_df = house.merge(bank, on="month", how="left")
-            model_df = model_df.merge(wage, on="month", how="left")
-            model_df = model_df.merge(pop, on="month", how="left")
-            model_df = model_df.merge(unemp, on="month", how="left")
-            model_df = model_df.merge(guard, on="month", how="left")
-            model_df["avg_property_size_sqm"] = epc_size
-            model_df = model_df.sort_values("month")
+        model_df = house.merge(bank, on="month", how="left")
+        model_df = model_df.merge(wage, on="month", how="left")
+        model_df = model_df.merge(pop, on="month", how="left")
+        model_df = model_df.merge(unemp, on="month", how="left")
+        model_df = model_df.merge(guard, on="month", how="left")
+        model_df["avg_property_size_sqm"] = epc_size
+        model_df = model_df.sort_values("month")
 else:
     model_df = pd.DataFrame()
 
@@ -364,12 +419,16 @@ section = st.sidebar.radio(
     "Choose Section",
     ["Guardian Sentiment", "EPC Property Size", "Combined Demo"]
 )
+section = st.sidebar.radio("Choose Section", ["Guardian Sentiment", "EPC Property Size", "Combined Demo"])
+
 if not model_df.empty:
     st.subheader("Modeling Table")
     st.dataframe(model_df, use_container_width=True)
 
+
 # ---------------------------------------------------
 # GUARDIAN SECTION
+# SECTIONS
 # ---------------------------------------------------
 if section == "Guardian Sentiment":
     x_cols = [
@@ -391,10 +450,6 @@ if section == "Guardian Sentiment":
     coef_df = fit_ols_numpy(model_df, "real_estate_value", x_cols)
     st.subheader("Linear Model Coefficients")
     st.dataframe(coef_df, use_container_width=True)
-        if not model_df.empty:
-            coef_df = fit_ols_numpy(model_df, "real_estate_value", x_cols)
-            st.subheader("Linear Model Coefficients")
-            st.dataframe(coef_df, use_container_width=True)
 
         df = get_guardian_articles(
             query,
@@ -402,6 +457,7 @@ if section == "Guardian Sentiment":
             str(to_date)
         )
 
+        df = get_guardian_articles(query, str(from_date), str(to_date))
         if df.empty:
             st.warning("No data found.")
         else:
@@ -420,14 +476,108 @@ if section == "Guardian Sentiment":
             fig = px.line(
                 monthly,
                 x="date",
-@@ -444,42 +449,38 @@ else:
+                y="sentiment",
+                title="Average Monthly News Sentiment"
+            )
+
+            st.dataframe(df, use_container_width=True)
+            monthly = monthly_average(df, "date", "sentiment", "sentiment")
+            monthly["month"] = monthly["month"].dt.strftime("%Y-%m")
+            fig = px.line(monthly, x="month", y="sentiment", title="Average Monthly News Sentiment")
+            st.plotly_chart(fig, use_container_width=True)
+
+# ---------------------------------------------------
+# EPC SECTION
+# ---------------------------------------------------
+elif section == "EPC Property Size":
+    if not model_df.empty:
+        x_cols = [
+            "bank_rate",
+            "median_wage",
+            "population_total",
+            "avg_property_size_sqm",
+            "unemployment_rate",
+            "guardian_sentiment",
+        ]
+        coef_df = fit_ols_numpy(model_df, "real_estate_value", x_cols)
+        st.subheader("Linear Model Coefficients")
+        st.dataframe(coef_df, use_container_width=True)
+
+elif section == "EPC Property Size":
+    st.subheader("EPC Property Size Data")
+
+    postcode = st.text_input("Enter postcode", "SW1A 1AA")
+
+    if st.button("Load EPC Data"):
+
+        epc_df = get_epc_data(postcode)
+
+        if epc_df.empty:
+            st.warning("No EPC records found.")
+    epc_df = get_epc_data(postcode)
+    if epc_df.empty:
+        st.warning("No EPC records found.")
+    else:
+        st.dataframe(epc_df, use_container_width=True)
+        size_col = next((c for c in ["total-floor-area", "floor-area", "floorArea", "floors-area"] if c in epc_df.columns), None)
+        if size_col:
+            epc_df[size_col] = pd.to_numeric(epc_df[size_col], errors="coerce")
+            avg_size = epc_df[size_col].mean()
+            st.metric("Average Floor Area (sqm)", round(avg_size, 2))
+            fig = px.histogram(epc_df, x=size_col, nbins=20, title="Distribution of Property Size")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.dataframe(epc_df)
+
+            possible_size_cols = [
+                "total-floor-area",
+                "floor-area",
+                "floorArea",
+                "floors-area"
+            ]
+
+            size_col = None
+            for col in possible_size_cols:
+                if col in epc_df.columns:
+                    size_col = col
+                    break
+
+            if size_col:
+                epc_df[size_col] = pd.to_numeric(
+                    epc_df[size_col],
+                    errors="coerce"
+                )
+
+                avg_size = epc_df[size_col].mean()
+
+                st.metric("Average Floor Area (sqm)", round(avg_size, 2))
+
+                fig = px.histogram(
+                    epc_df,
+                    x=size_col,
+                    nbins=20,
+                    title="Distribution of Property Size"
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Floor area column not found in returned data.")
+            st.info("Floor area column not found in returned data.")
+
+# ---------------------------------------------------
+# COMBINED DEMO SECTION
+# ---------------------------------------------------
+else:
+    st.subheader("Combined Example Dashboard")
+
+    demo = pd.DataFrame({
         "year": [2020, 2021, 2022, 2023, 2024],
         "average_price": [250000, 270000, 292000, 285000, 300000],
         "unemployment_rate": [4.5, 4.6, 3.8, 4.1, 4.4],
         "median_wage": [29000, 30000, 32000, 33500, 35000],
         "bank_rate": [0.1, 0.1, 3.5, 5.25, 5.0],
         "population_growth": [0.4, 0.5, 0.6, 0.3, 0.2]
-    )
+    })
 
     st.dataframe(demo)
 
@@ -436,6 +586,15 @@ if section == "Guardian Sentiment":
         x="year",
         y="average_price",
         title="Average Property Price"
+    demo = pd.DataFrame(
+        {
+            "year": [2020, 2021, 2022, 2023, 2024],
+            "average_price": [250000, 270000, 292000, 285000, 300000],
+            "unemployment_rate": [4.5, 4.6, 3.8, 4.1, 4.4],
+            "median_wage": [29000, 30000, 32000, 33500, 35000],
+            "bank_rate": [0.1, 0.1, 3.5, 5.25, 5.0],
+            "population_growth": [0.4, 0.5, 0.6, 0.3, 0.2],
+        }
     )
     st.plotly_chart(fig1, use_container_width=True)
     fig = px.line(model_df, x="month", y="real_estate_value", title="England Real Estate Value (Dependent Variable)")
@@ -450,8 +609,14 @@ if section == "Guardian Sentiment":
         x="month",
         y=["bank_rate", "unemployment_rate", "guardian_sentiment"],
         title="Selected Independent Variables Over Time",
+    st.dataframe(demo, use_container_width=True)
+    st.plotly_chart(px.line(demo, x="year", y="average_price", title="Average Property Price"), use_container_width=True)
+    st.plotly_chart(
+        px.line(demo, x="year", y=["unemployment_rate", "bank_rate"], title="Unemployment vs Interest Rates"),
+        use_container_width=True,
     )
     st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(px.line(demo, x="year", y="median_wage", title="Median Wage Growth"), use_container_width=True)
 
     fig3 = px.line(
         demo,
@@ -460,6 +625,11 @@ if section == "Guardian Sentiment":
         title="Median Wage Growth"
     )
     st.plotly_chart(fig3, use_container_width=True)
+    if not model_df.empty:
+        st.plotly_chart(
+            px.line(model_df, x="month", y="real_estate_value", title="England Real Estate Value (Dependent Variable)"),
+            use_container_width=True,
+        )
 
 st.caption("Beginner version. Next step: replace demo data with real HM Land Registry and ONS datasets.")
 st.caption(f"BOE source: {BOE_RATE_URL} | ONS base URL: {ONS_BASE_URL}")
