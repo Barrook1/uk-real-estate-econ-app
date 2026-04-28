@@ -301,6 +301,37 @@ if run:
         pop = load_csv_fallback("ons_population.csv", "date", "population_total", "population_total")
 
     except:
+            st.warning("No EPC records were returned for the selected postcode.")
+        house = get_house_price_england()
+        bank = get_bank_rate()
+        guard = get_guardian_sentiment(query, str(from_date), str(to_date))
+        epc_size = get_epc_size_for_postcode(postcode)
+
+        if use_ons_api and all(wage_cfg.values()):
+            wage = get_ons_series(**wage_cfg, out_name="median_wage")
+        else:
+            wage = load_csv_fallback("ons_median_wage.csv", "date", "median_wage", "median_wage")
+
+        if use_ons_api and all(pop_cfg.values()):
+            pop = get_ons_series(**pop_cfg, out_name="population_total")
+        else:
+            pop = load_csv_fallback("ons_population.csv", "date", "population_total", "population_total")
+
+        if use_ons_api and all(unemp_cfg.values()):
+            unemp = get_ons_series(**unemp_cfg, out_name="unemployment_rate")
+        else:
+            unemp = load_csv_fallback("ons_unemployment.csv", "date", "unemployment_rate", "unemployment_rate")
+
+        model_df = house.merge(bank, on="month", how="left")
+        model_df = model_df.merge(wage, on="month", how="left")
+        model_df = model_df.merge(pop, on="month", how="left")
+        model_df = model_df.merge(unemp, on="month", how="left")
+        model_df = model_df.merge(guard, on="month", how="left")
+        model_df["avg_property_size_sqm"] = epc_size
+        model_df = model_df.sort_values("month")
+        st.subheader("Modeling Table")
+        st.dataframe(model_df, use_container_width=True)
+    except Exception
         st.error("Could not read EPC response.")
         return pd.DataFrame()
     if use_ons_api and all(unemp_cfg.values()):
