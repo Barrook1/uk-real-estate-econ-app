@@ -427,7 +427,7 @@ if section == "Guardian Sentiment":
         "median_wage": [29000, 30000, 32000, 33500, 35000],
         "bank_rate": [0.1, 0.1, 3.5, 5.25, 5.0],
         "population_growth": [0.4, 0.5, 0.6, 0.3, 0.2]
-    })
+    )
 
     st.dataframe(demo)
 
